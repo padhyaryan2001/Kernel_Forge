@@ -1,0 +1,76 @@
+# KernelForge configuration. Copy to config.yaml (git-ignored) and edit the paths.
+mode: cuda                     # reference (CPU math only) | cuda (default local path) | remote (optional adapter)
+runs_dir: runs                 # SQLite + artifacts; git-ignored
+
+worker:
+  transport: local_process     # local_process | local_container | remote
+  gpu_index: 0
+  concurrent_jobs: 1           # one GPU job at a time (enforced)
+  max_tensor_bytes: 1073741824 # 1 GiB benchmark working-set cap; checked before allocation
+  python: null                 # evaluator interpreter, e.g. ~/venvs/kernelforge/bin/python (default: current)
+  container_image: kernelforge-worker:latest
+  container_memory: 6g
+  remote_host: null            # only for transport: remote (host key must already be in known_hosts)
+  max_compile_jobs: 2
+
+generator:
+  backend: openai_compatible
+  runtime: llama_cpp           # llama_cpp (managed by the controller) | external (you run it; not stopped)
+  base_url: http://127.0.0.1:8000/v1   # loopback only
+  model: local-coder           # serving alias
+  source_model: Qwen/Qwen2.5-Coder-3B-Instruct-GGUF
+  source_file: qwen2.5-coder-3b-instruct-q4_k_m.gguf
+  source_revision: f74adce6aa16316c625447af059dbebe4983757c
+  source_sha256: 724fb256bec1ff062b2f65e4569e871ad2e95ab2a3989723d1769c54294730b7
+  quantization: Q4_K_M
+  context_tokens: 4096
+  max_output_tokens: 1536
+  max_concurrent_requests: 1
+  managed_process: true
+  stop_before_gpu_evaluation: true
+  temperature: 0.7
+  server_binary: ~/opt/llama.cpp-b12024/llama-b12024/llama-server
+  server_lib_dirs: [~/opt/llama.cpp-b12024/cudart-llama-b12024-bin-ubuntu-cuda-13.4-x64]
+  model_path: ~/models/qwen2.5-coder-3b-instruct-q4_k_m.gguf
+  n_gpu_layers: 99
+
+# Measured alternative on the 8 GB RTX 5060 Ti (server ~4,681 MiB at 4,096-token context; see RESULTS.md):
+#   source_model: Qwen/Qwen2.5-Coder-7B-Instruct-GGUF, source_revision: 13fb94bfda8c8cf22497dc57b78f391a9acb426a,
+#   source_file / model_path: qwen2.5-coder-7b-instruct-q4_k_m.gguf,
+#   source_sha256: 509287f78cb4d4cf6b3843734733b914b2c158e43e22a7f4bf5e963800894d3c
+# Optional remote upgrade (a different model configuration; never reported as the 3B results):
+#   runtime: external, managed_process: false, base_url: https://<your-qwen3-coder-host>/v1,
+#   model: <served name>, source_model: Qwen/Qwen3-Coder-30B-A3B-Instruct
+
+critics:                       # exact model IDs; null = arm unavailable (recorded, not silently swapped)
+  openai_model: null
+  anthropic_model: null        # e.g. claude-opus-5-5
+  google_model: null
+  self_critique: true          # local Qwen coder as its own critic
+  max_output_tokens: 8000
+  pricing: {}                  # optional: {model_id: {input_per_mtok: x, output_per_mtok: y, source: <url>}}
+
+search:
+  candidates_per_round: 2
+  max_rounds: 4
+  max_compile_seconds: 120
+  max_execution_seconds: 30
+  max_total_generator_tokens: 200000
+  max_experiment_minutes: 180
+  mode: full                   # full | launch_only (restricted search: fixed verified kernel, launch edits only)
+  correctness_suite: dev
+  benchmark_suite: search
+  primary_baseline: torch_eager
+  score_scope: graph            # agent selection score: graph (CUDA-graph replay, device time) | operator (eager, incl. host dispatch)
+
+benchmark:
+  warmup_iterations: 25
+  samples: 50
+  calls_per_sample: 20
+  independent_sessions: 3
+  min_batch_ms: 0.5
+
+targets:                       # aspirational; never shown as results
+  layernorm_speedup: 1.22
+  mrope_memory_reduction_fraction: 0.60
+  generated_kernel_speedup: 2.20

@@ -1,0 +1,58 @@
+name: gpu-benchmarks
+
+# Manually triggered only. Targets the RTX 5060 Ti PC registered as a self-hosted runner
+# (labels below); the runner may be offline whenever the PC is off. Hosted Ubuntu runners
+# have no GPU and are never used here.
+on:
+  workflow_dispatch:
+    inputs:
+      operator:
+        description: layernorm or mrope
+        default: layernorm
+      suite:
+        description: smoke | search | dev | heldout
+        default: smoke
+
+permissions:
+  contents: read
+
+jobs:
+  benchmark:
+    # Trusted revisions only: never run fork / pull-request code on the persistent GPU runner.
+    if: github.ref == 'refs/heads/main' && github.repository_owner == github.actor
+    runs-on: [self-hosted, linux, gpu, rtx5060ti]
+    timeout-minutes: 240
+    env:
+      # No secrets are exported to this job; candidate workers additionally receive a scrubbed env.
+      KF_PY: ${{ vars.KERNELFORGE_PYTHON || '~/venvs/kernelforge/bin/python' }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Preflight
+        run: |
+          KF_PY=$(eval echo $KF_PY)
+          cp config.example.yaml config.yaml
+          sed -i "s#  python: null .*#  python: $KF_PY#" config.yaml
+          $KF_PY -m kernelforge doctor
+          $KF_PY -m kernelforge smoke
+      - name: CUDA tests
+        run: $(eval echo $KF_PY) -m pytest -rs -m cuda
+      - name: Evaluator canaries
+        run: $(eval echo $KF_PY) -m kernelforge selftest-evaluator
+      - name: Baseline
+        run: $(eval echo $KF_PY) -m kernelforge baseline --operator "${{ inputs.operator }}" --suite "${{ inputs.suite }}" --mode cuda
+      - name: Report and evidence
+        if: always()
+        run: |
+          KF_PY=$(eval echo $KF_PY)
+          $KF_PY -m kernelforge report --output runs/report/index.html
+          for e in $($KF_PY -m kernelforge list | awk '{print $1}'); do $KF_PY -m kernelforge export-evidence --experiment "$e"; done
+      - name: Upload raw results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: kernelforge-results-${{ github.run_id }}
+          path: |
+            runs/**/evidence-*.zip
+            runs/report/index.html
+            runs/kernelforge.sqlite3
+          retention-days: 30

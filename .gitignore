@@ -1,0 +1,21 @@
+# experiment outputs, caches, checkpoints
+runs/
+site/
+*.gguf
+*.safetensors
+*.bin
+*.pt
+adapter*/
+# local configuration and secrets
+config.yaml
+rl.yaml
+.env
+# python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv*/
+.pytest_cache/
+build/
+dist/
+rl.warmstart.yaml

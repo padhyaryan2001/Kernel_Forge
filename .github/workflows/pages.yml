@@ -1,0 +1,58 @@
+name: pages
+
+# Builds the static report from a gpu-benchmarks artifact and deploys it to GitHub Pages.
+# Opt-in: set the repository variable KERNELFORGE_PAGES_ENABLED=true and enable Pages
+# (source: GitHub Actions). Nothing here is triggered automatically.
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: gpu-benchmarks workflow run id whose results to publish
+        required: true
+
+permissions:
+  contents: read
+  actions: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    if: vars.KERNELFORGE_PAGES_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e .
+      - uses: actions/download-artifact@v4
+        with:
+          name: kernelforge-results-${{ inputs.run_id }}
+          run-id: ${{ inputs.run_id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: downloaded
+      - name: Rebuild report from saved evidence only (no GPU, no model, no credentials)
+        run: |
+          mkdir -p runs site
+          cp downloaded/runs/kernelforge.sqlite3 runs/ 2>/dev/null || true
+          for z in downloaded/runs/*/evidence-*.zip; do
+            e=$(basename "$z" .zip); e=${e#evidence-}; mkdir -p "runs/$e"; unzip -o -q "$z" -d "runs/$e"
+          done
+          python -m kernelforge report --output site/index.html
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

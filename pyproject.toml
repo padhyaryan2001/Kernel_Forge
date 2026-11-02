@@ -1,0 +1,40 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "kernelforge"
+version = "0.1.0"
+description = "Execution-guided Triton kernel search with a trusted GPU evaluator, built for an 8 GB RTX 5060 Ti."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+# Controller dependencies only. PyTorch (+ its pinned Triton) is installed from the
+# official PyTorch index for the GPU worker, or the CPU index for CI; see README.
+dependencies = [
+  "pydantic>=2.7,<3",
+  "pyyaml>=6",
+  "psutil>=5.9",
+]
+
+[project.optional-dependencies]
+test = ["pytest>=8"]
+# Hosted critic adapters. Each is optional; a missing SDK or key disables only that arm.
+critics = ["openai>=1.40", "anthropic>=1.0", "google-genai>=1.0"]
+# Upstream convention check for MRoPE (tests/test_references.py).
+upstream = ["transformers>=4.45"]
+# RL extension: install into its own environment (see README "RL extension").
+rl = ["trl>=0.20", "peft>=0.12", "transformers>=4.45", "datasets>=2.20", "accelerate>=1.0"]
+
+[project.scripts]
+kernelforge = "kernelforge.__main__:main"
+
+[tool.setuptools.packages.find]
+include = ["kernelforge*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
+markers = [
+  "cuda: requires a CUDA GPU with working Triton (skipped, never passed, without one)",
+]

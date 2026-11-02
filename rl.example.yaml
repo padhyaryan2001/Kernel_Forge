@@ -1,0 +1,28 @@
+# Optional RL extension (GRPO + LoRA). Copy to rl.yaml. Runs in its own environment; see README.
+model: Qwen/Qwen2.5-Coder-0.5B-Instruct   # trainable upstream checkpoint (not the GGUF generator, not Qwen3-Coder)
+model_revision: ea3f2471cf1b1f0db85067f1ef93848e38e88c25   # pinned HF commit (verified 2026-11-01)
+operators: [layernorm]        # mrope needs ~1233 prompt + 931 completion tokens: over this budget
+output_dir: runs/rl
+seed: 0
+lora_rank: 8
+lora_alpha: 16
+lora_dropout: 0.05
+lora_target_modules: [q_proj, k_proj, v_proj, o_proj]
+learning_rate: 1.0e-5
+max_steps: 4                  # resource-probe size; raise only after a successful smoke run
+num_generations: 2            # completions per prompt (GRPO group)
+prompts_per_step: 1
+max_prompt_tokens: 768
+max_completion_tokens: 640     # measured 2026-11-01: a complete tuned LayerNorm answer is 569 tokens (512 would truncate)
+temperature: 0.9
+beta: 0.04                    # KL weight vs the reference policy
+gradient_checkpointing: true
+bf16: true
+save_steps: 2
+min_free_vram_gib: 3.5
+min_free_ram_gib: 3.0
+reward_timing_samples: 10
+stop_if_no_signal_steps: 4
+warm_start_sft_steps: 0       # >0: separately labeled supervised warm-start on verified kernels
+eval_samples_per_prompt: 4
+eval_max_new_tokens: 640

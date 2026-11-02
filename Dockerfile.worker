@@ -1,0 +1,23 @@
+# Disposable GPU evaluator image for worker.transport=local_container.
+# The trusted evaluator code is baked in (not mounted), runs as a non-root user, and the
+# controller starts it with --network none, --read-only, --cap-drop ALL, no-new-privileges,
+# pids/memory limits and only the task directory mounted. No secrets are passed in.
+#
+#   docker build -f Dockerfile.worker -t kernelforge-worker:latest .
+#   docker run --rm --gpus all kernelforge-worker:latest python -c "import torch; print(torch.cuda.is_available())"
+FROM python:3.12-slim
+
+# Triton compiles a small C launcher at runtime: it needs a C compiler and Python headers.
+RUN apt-get update && apt-get install -y --no-install-recommends gcc libc6-dev && rm -rf /var/lib/apt/lists/*
+
+# Pinned to the versions validated on the RTX 5060 Ti (sm_120); see requirements-gpu.lock.
+RUN pip install --no-cache-dir "torch==2.10.0" --index-url https://download.pytorch.org/whl/cu128 \
+ && pip install --no-cache-dir "pydantic>=2.7,<3" "pyyaml>=6" "psutil>=5.9"
+
+WORKDIR /opt/kernelforge
+COPY kernelforge ./kernelforge
+RUN useradd --uid 1000 --create-home worker && chmod -R a-w /opt/kernelforge
+ENV PYTHONPATH=/opt/kernelforge PYTHONDONTWRITEBYTECODE=1
+USER 1000:1000
+ENTRYPOINT []
+CMD ["python", "-m", "kernelforge.worker", "--help"]
